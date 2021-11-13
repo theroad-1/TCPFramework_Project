@@ -1,6 +1,7 @@
 package znet
 
 import (
+	"Zinx/utils"
 	"Zinx/ziface"
 	"fmt"
 	"net"
@@ -16,14 +17,21 @@ type Server struct {
 	IP string
 	//服务器监听的端口
 	Port int
-	//当前的Server添加一个router，server注册的连接对应的处理业务
-	Router ziface.IRouter
+	//当前server的消息管理模块，用来绑定MsgID和对应的处理业务API关系
+	MsgHandler ziface.IMsgHandle
 }
 
 func (s *Server) Start() {
-	fmt.Printf("[Start]Server Listenner at IP : %s,Port:%d, is starting\n", s.IP, s.Port)
+	fmt.Printf("[Zinx] Server Name : %s,listenner at IP : %s,Port %d is starting\r",
+		utils.GlobalObject.Name, utils.GlobalObject.Host, utils.GlobalObject.TcpPort)
+	fmt.Printf("[Zinx] Version %s,MaxConn:%d,MaxPackageSize:%d\n",
+		utils.GlobalObject.Version, utils.GlobalObject.MaxConn, utils.GlobalObject.MaxPackageSize)
+	//fmt.Printf("[Start]Server Listenner at IP : %s,Port:%d, is starting\n", s.IP, s.Port)
 
 	go func() {
+		//0 开启消息队列及worker工作池
+		s.MsgHandler.StartWorkerPool()
+
 		//1.获取一个TCP的Addr
 		addr, err := net.ResolveTCPAddr(s.IPVersion, fmt.Sprintf("%s:%d", s.IP, s.Port))
 		if err != nil {
@@ -48,7 +56,7 @@ func (s *Server) Start() {
 				continue
 			}
 			//将处理新连接的业务方法和conn进行绑定，得到我们的连接模块
-			dealConn := NewConnection(conn, cid, s.Router)
+			dealConn := NewConnection(conn, cid, s.MsgHandler)
 			cid++
 			go dealConn.Start()
 		}
@@ -65,19 +73,19 @@ func (s *Server) Serve() {
 }
 
 //路由功能：给当前的服务注册一个路由方法，供客户端的连接处理使用
-func (s *Server) AddRouter(router ziface.IRouter) {
-	s.Router = router
+func (s *Server) AddRouter(msgID uint32, router ziface.IRouter) {
+	s.MsgHandler.AddRouter(msgID, router)
 	fmt.Println("Add Router success!!")
 }
 
 //初始化Serve模块的方法
-func NewServer(name string) ziface.IServer {
+func NewServer() ziface.IServer {
 	s := &Server{
-		Name:      name,
-		IPVersion: "tcp4",
-		IP:        "0.0.0.0",
-		Port:      8999,
-		Router:    nil,
+		Name:       utils.GlobalObject.Name,
+		IPVersion:  "tcp4",
+		IP:         utils.GlobalObject.Host,
+		Port:       utils.GlobalObject.TcpPort,
+		MsgHandler: NewMsgHandle(),
 	}
 	return s
 }
