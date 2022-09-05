@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	"net"
 )
@@ -14,6 +15,9 @@ import (
 链接模块
 */
 type Connection struct {
+	//当前Conn隶属于那个Server
+	TcpServer ziface.IServer
+
 	//当前链接的socket：TCP套接字
 	Conn *net.TCPConn
 	//链接的ID
@@ -21,26 +25,36 @@ type Connection struct {
 	//当前的链接状态
 	isClosed bool
 
-	//告知当前路径已经退出/停止 的channel
+	//告知writer当前连接已经退出/停止的channel
 	ExitChan chan bool
 
 	//无缓冲的管道，用于读写goroutine之间的消息通道
 	msgChan chan []byte
 
-	//消息的管理msgID和对应的处理业务API关系
+	//消息的管理 msgID和对应的处理业务API关系
 	MsgHandler ziface.IMsgHandle
+
+	//连接属性集合
+	property map[string]interface{}
+	//保护连接属性的锁
+	propertyLock sync.RWMutex
 }
 
 //初始化链接模块的方法
-func NewConnection(conn *net.TCPConn, connID uint32, msgHandler ziface.IMsgHandle) *Connection {
+func NewConnection(server ziface.IServer, conn *net.TCPConn, connID uint32, msgHandler ziface.IMsgHandle) *Connection {
 	c := &Connection{
+		TcpServer:  server,
 		Conn:       conn,
 		ConnID:     connID,
 		MsgHandler: msgHandler,
 		isClosed:   false,
 		msgChan:    make(chan []byte),
 		ExitChan:   make(chan bool, 1),
+		property:   map[string]interface{}{},
 	}
+	//将conn加入到connManager中
+	c.TcpServer.GetConnMgr().Add(c)
+
 	return c
 }
 func (c *Connection) StartReader() {
@@ -61,6 +75,7 @@ func (c *Connection) StartReader() {
 
 		//读取客户端的Msg Head 二进制流8个字节
 		headData := make([]byte, dp.GetHeadLen())
+		//TCPConn实现的read方法，即实现了reader接口
 		if _, err := io.ReadFull(c.GetTCPConnection(), headData); err != nil {
 			fmt.Println("read msg head err:", err)
 			break
@@ -127,6 +142,9 @@ func (c *Connection) Start() {
 	//启动从当前链接的读数据业务
 	go c.StartReader()
 	go c.StartWriter()
+
+	//按照开发者传递进来的 创建连接之后需要调用的处理业务，执行对应hook函数
+	c.TcpServer.CallOnConnStart(c)
 }
 
 //停止链接 结束当前链接的工作
@@ -138,9 +156,15 @@ func (c *Connection) Stop() {
 	}
 
 	c.isClosed = true
+
+	c.TcpServer.CallOnConnStop(c)
+
 	//关闭socket链接
 	c.Conn.Close()
 	c.ExitChan <- true
+
+	//将当前连接从connmgr删除掉
+	c.TcpServer.GetConnMgr().Remove(c)
 	//回收资源
 	close(c.ExitChan)
 	close(c.msgChan)
@@ -178,4 +202,31 @@ func (c *Connection) SendMsg(msgId uint32, data []byte) error {
 	c.msgChan <- binaryMsg
 
 	return nil
+}
+
+//设置连接属性
+func (c *Connection) SetProperty(key string, value interface{}) {
+	c.propertyLock.Lock()
+	defer c.propertyLock.Unlock()
+
+	c.property[key] = value
+}
+
+//获取连接属性
+func (c *Connection) GetProperty(key string) (interface{}, error) {
+	c.propertyLock.RLock()
+	defer c.propertyLock.RUnlock()
+	if value, ok := c.property[key]; ok {
+		return value, nil
+	} else {
+		return nil, errors.New("no property found!")
+	}
+}
+
+//移除连接属性
+func (c *Connection) RemoveProperty(key string) {
+	c.propertyLock.Lock()
+	defer c.propertyLock.Unlock()
+	//删除属性
+	delete(c.property, key)
 }

@@ -37,7 +37,7 @@ var GlobalObject *GlobalObj
 
 func (g *GlobalObj) Reload() {
 
-	data, err := ioutil.ReadFile("E:\\GoProject\\Zinx\\Demo\\ZinxV0.5\\conf\\zinx.json")
+	data, err := ioutil.ReadFile("E:\\GoProject\\Zinx_Project\\MMO_Game_Zinx\\conf\\zinx.json")
 	if err != nil {
 		panic(err)
 	}
@@ -51,10 +51,10 @@ func (g *GlobalObj) Reload() {
 提供一个init方法，初始化globalobj
 */
 func init() {
-	//如果配置文件没有加载，使用默认的值
+	//先配置使用默认的值
 	GlobalObject = &GlobalObj{
 		Name:             "ZinxServerApp",
-		Version:          "V0.8",
+		Version:          "V0.9",
 		TcpPort:          8999,
 		Host:             "0.0.0.0", //当前主机所有网卡的地址，单个网卡可以写127.0.0.1
 		MaxConn:          1000,
@@ -64,6 +64,6 @@ func init() {
 
 	}
 
-	//应该尝试从conf/zinx.json去加载一些用户自定义的参数
+	//从conf/zinx.json去加载一些用户自定义的参数
 	GlobalObject.Reload()
 }

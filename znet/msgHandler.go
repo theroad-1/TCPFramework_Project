@@ -34,7 +34,7 @@ func (mh *MsgHandle) DoMsgHandler(request ziface.IRequest) {
 	handler, ok := mh.Apis[request.GetMsgID()]
 	if !ok {
 		fmt.Println("api msgID = ", request.GetMsgID(), "is NOT FOUND! please register")
-
+		return
 	}
 
 	//2 根据msgID 调度对应的router业务
@@ -73,8 +73,8 @@ func (mh *MsgHandle) StartOneWorker(workerID int, taskQueue chan ziface.IRequest
 	//不断阻塞等待对应消息队列的信息
 	for {
 		select {
-		case request := <-taskQueue:
-			mh.DoMsgHandler(request)
+		case request := <-taskQueue: //从消息队列获取到一个请求后
+			mh.DoMsgHandler(request) //进行处理
 
 		}
 	}
@@ -83,11 +83,10 @@ func (mh *MsgHandle) StartOneWorker(workerID int, taskQueue chan ziface.IRequest
 //将消息交给taskQueue，由worker处理
 func (mh *MsgHandle) SendMsgToTaskQueue(request ziface.IRequest) {
 	//1 将消息平均分配给不同的worker
-	//根据客户端建立的connID来分配
+	//根据客户端建立的connID来分配,cid是从0开始自增的。
 	workerID := request.GetConnection().GetConnID() % mh.WorkerPoolSize
 	fmt.Println("Add connID=", request.GetConnection().GetConnID(),
 		"request MsgID =", request.GetMsgID(), "to workerID", workerID)
 	//2 将消息发送给对应worker的taskQueue
 	mh.TaskQueue[workerID] <- request
-
 }

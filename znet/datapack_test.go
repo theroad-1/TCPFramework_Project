@@ -34,7 +34,7 @@ func TestDataPack(t *testing.T) {
 				//定义一个拆包的对象dp
 				dp := NewDataPack()
 				for true {
-					//第一次从conn读，把包的head读出来
+					//第一次从conn读，用8字节大小的byte切片先把包的head读出来
 					headData := make([]byte, dp.GetHeadLen())
 					_, err := io.ReadFull(conn, headData)
 					if err != nil {
@@ -48,7 +48,7 @@ func TestDataPack(t *testing.T) {
 					}
 					if msgHead.GetMsgLen() > 0 {
 						//说明msg里面有数据，需要第二次读取
-						//第二次从conn读，根据head中的datalen再读取data内容
+						//第二次从conn读，根据head中的datalen再读取后续data内容
 						msg := msgHead.(*Message)
 						msg.Data = make([]byte, msg.GetMsgLen())
 
